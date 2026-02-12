@@ -1,0 +1,92 @@
+/**
+ * ExecutionAcceptanceService — Mints execution IDs and creates Execution aggregates.
+ * DDD-002: Domain Service  |  ADR-004: Sole minting authority
+ *
+ * This is the ONLY place in the entire fleet where execution_ids are created.
+ *
+ * accept() flow:
+ *   1. Validate intent has required fields (lightweight — full enforcement already ran).
+ *   2. Mint ExecutionId.
+ *   3. Create root span metadata (atomically with ID).
+ *   4. Create Execution aggregate in 'accepted' state.
+ *   5. Register in repository.
+ *   6. Emit ExecutionAccepted event.
+ *   7. Return AcceptanceResponse.
+ *
+ * reject() flow:
+ *   1. Emit ExecutionRejected event.
+ *   2. Return RejectionResponse. No ID minted.
+ */
+import type { ExecutionIntent } from '../contracts/index.js';
+import type { EnforcementDecision } from '../domain/enforcement-decision.js';
+import { mintExecutionId } from './execution-id.js';
+import { createRootSpanMeta } from './root-span-meta.js';
+import { createExecution } from './execution.js';
+import type { AcceptanceResponse, RejectionResponse } from './acceptance-response.js';
+import type { ExecutionRepository } from './execution-repository.js';
+import type { EventBus } from '../domain/events/event-bus.js';
+import { createExecutionAccepted, createExecutionRejected } from './execution-events.js';
+
+export class ExecutionAcceptanceService {
+  constructor(
+    private readonly repository: ExecutionRepository,
+    private readonly eventBus: EventBus,
+  ) {}
+
+  accept(intent: ExecutionIntent, enforcementDecision?: EnforcementDecision | null): AcceptanceResponse {
+    // Step 1: Lightweight structural check (full enforcement already ran at CLI gate).
+    const validationError = this.validateMinimalFields(intent);
+    if (validationError) {
+      throw new Error(`Cannot accept intent: ${validationError}`);
+    }
+
+    // Step 2: Mint execution_id — THE SINGLE MINTING POINT (ADR-004)
+    const executionId = mintExecutionId();
+
+    // Step 3: Create root span metadata (atomic with ID)
+    const rootSpan = createRootSpanMeta(
+      executionId.value,
+      intent.id,
+      intent.caller,
+    );
+
+    // Step 4: Create Execution aggregate in 'accepted' state
+    const execution = createExecution(executionId, intent, rootSpan, enforcementDecision ?? null);
+
+    // Step 5: Register
+    this.repository.save(execution);
+
+    // Step 6: Emit ExecutionAccepted
+    this.eventBus.emit(
+      createExecutionAccepted(executionId.value, intent.id, rootSpan.span_id),
+    );
+
+    // Step 7: Return AcceptanceResponse
+    return {
+      execution_id: executionId.value,
+      root_span_id: rootSpan.span_id,
+      accepted: true,
+    };
+  }
+
+  reject(intent: ExecutionIntent, reason: string): RejectionResponse {
+    // No ID minted. No execution created.
+    this.eventBus.emit(
+      createExecutionRejected(intent.id, reason),
+    );
+
+    return {
+      accepted: false,
+      intent_id: intent.id,
+      reason,
+    };
+  }
+
+  private validateMinimalFields(intent: ExecutionIntent): string | null {
+    if (!intent.id) return 'intent.id is required';
+    if (!intent.caller) return 'intent.caller is required';
+    if (!intent.action) return 'intent.action is required';
+    if (!intent.target) return 'intent.target is required';
+    return null;
+  }
+}
