@@ -14,6 +14,7 @@
     "check:contract-imports": "node --import tsx scripts/contract-import-check.ts"
   },
   "dependencies": {
+    "@agentics/contracts": ">=0.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
@@ -22,14 +23,6 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
-  },
-  "peerDependencies": {
-    "@agentics/contracts": ">=0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "@agentics/contracts": {
-      "optional": true
-    }
   },
   "engines": {
     "node": ">=20"

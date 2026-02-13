@@ -2,8 +2,10 @@
  * SchemaRegistry — Anti-corruption layer between Enforcement and Contracts.
  * DDD-003: Domain Service
  *
- * Wraps the raw Zod schema imports from src/contracts/.
+ * Wraps the raw Zod schema imports from @agentics/contracts (via src/contracts/).
  * If the contracts package changes format, only this file needs updating.
+ *
+ * Includes validateOrThrow() for runtime contract validation of outbound payloads.
  */
 import type { ZodTypeAny } from 'zod';
 import {
@@ -36,6 +38,22 @@ export class SchemaNotFoundError extends Error {
   ) {
     super(
       `Schema "${schema_name}" not found. Available: ${available_schemas.join(', ')}`,
+    );
+  }
+}
+
+export class ContractValidationError extends Error {
+  override readonly name = 'ContractValidationError';
+  constructor(
+    public readonly schema_name: string,
+    public readonly schema_version: string,
+    public readonly errors: SchemaError[],
+    public readonly execution_id?: string,
+  ) {
+    super(
+      `Contract validation failed for ${schema_name} (v${schema_version})` +
+      (execution_id ? ` [execution_id: ${execution_id}]` : '') +
+      `: ${errors.map((e) => e.message).join('; ')}`,
     );
   }
 }
@@ -81,5 +99,27 @@ export class SchemaRegistry {
     }));
 
     return createFailedResult(name, version, errors);
+  }
+
+  /**
+   * Validate a payload against a named contract schema.
+   * If validation fails, THROW immediately — DO NOT continue execution.
+   *
+   * Used for runtime validation of:
+   *   - execution proofs before sending
+   *   - lifecycle events before emitting
+   *   - execution graph updates before writing
+   *   - results-index payloads before POSTing
+   */
+  validateOrThrow(name: string, data: unknown, execution_id?: string): void {
+    const result = this.validate(name, data);
+    if (!result.passed) {
+      throw new ContractValidationError(
+        name,
+        result.schema_version,
+        result.errors,
+        execution_id,
+      );
+    }
   }
 }

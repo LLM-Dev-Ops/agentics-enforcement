@@ -6,12 +6,13 @@
  *
  * accept() flow:
  *   1. Validate intent has required fields (lightweight — full enforcement already ran).
- *   2. Mint ExecutionId.
- *   3. Create root span metadata (atomically with ID).
- *   4. Create Execution aggregate in 'accepted' state.
- *   5. Register in repository.
- *   6. Emit ExecutionAccepted event.
- *   7. Return AcceptanceResponse.
+ *   2. Validate execution context (simulation_resolution, repo_name REQUIRED).
+ *   3. Mint ExecutionId.
+ *   4. Create root span metadata (atomically with ID).
+ *   5. Create Execution aggregate in 'accepted' state.
+ *   6. Register in repository.
+ *   7. Emit ExecutionAccepted event.
+ *   8. Return AcceptanceResponse.
  *
  * reject() flow:
  *   1. Emit ExecutionRejected event.
@@ -27,45 +28,75 @@ import type { ExecutionRepository } from './execution-repository.js';
 import type { EventBus } from '../domain/events/event-bus.js';
 import { createExecutionAccepted, createExecutionRejected } from './execution-events.js';
 
+export interface AcceptOptions {
+  simulation_resolution: string;
+  repo_name: string;
+}
+
 export class ExecutionAcceptanceService {
   constructor(
     private readonly repository: ExecutionRepository,
     private readonly eventBus: EventBus,
   ) {}
 
-  accept(intent: ExecutionIntent, enforcementDecision?: EnforcementDecision | null): AcceptanceResponse {
+  accept(
+    intent: ExecutionIntent,
+    options: AcceptOptions,
+    enforcementDecision?: EnforcementDecision | null,
+  ): AcceptanceResponse {
     // Step 1: Lightweight structural check (full enforcement already ran at CLI gate).
     const validationError = this.validateMinimalFields(intent);
     if (validationError) {
       throw new Error(`Cannot accept intent: ${validationError}`);
     }
 
-    // Step 2: Mint execution_id — THE SINGLE MINTING POINT (ADR-004)
+    // Step 2: Validate strict execution context fields
+    if (!options.simulation_resolution) {
+      throw new Error(
+        `Cannot accept intent: simulation_resolution is required (intent_id: ${intent.id})`,
+      );
+    }
+    if (!options.repo_name) {
+      throw new Error(
+        `Cannot accept intent: repo_name is required (intent_id: ${intent.id})`,
+      );
+    }
+
+    // Step 3: Mint execution_id — THE SINGLE MINTING POINT (ADR-004)
     const executionId = mintExecutionId();
 
-    // Step 3: Create root span metadata (atomic with ID)
+    // Step 4: Create root span metadata (atomic with ID)
     const rootSpan = createRootSpanMeta(
       executionId.value,
       intent.id,
       intent.caller,
     );
 
-    // Step 4: Create Execution aggregate in 'accepted' state
-    const execution = createExecution(executionId, intent, rootSpan, enforcementDecision ?? null);
+    // Step 5: Create Execution aggregate in 'accepted' state with strict context
+    const execution = createExecution(
+      executionId,
+      intent,
+      rootSpan,
+      options.simulation_resolution,
+      options.repo_name,
+      enforcementDecision ?? null,
+    );
 
-    // Step 5: Register
+    // Step 6: Register
     this.repository.save(execution);
 
-    // Step 6: Emit ExecutionAccepted
+    // Step 7: Emit ExecutionAccepted
     this.eventBus.emit(
       createExecutionAccepted(executionId.value, intent.id, rootSpan.span_id),
     );
 
-    // Step 7: Return AcceptanceResponse
+    // Step 8: Return AcceptanceResponse
     return {
       execution_id: executionId.value,
       root_span_id: rootSpan.span_id,
       accepted: true,
+      simulation_resolution: options.simulation_resolution,
+      repo_name: options.repo_name,
     };
   }
 

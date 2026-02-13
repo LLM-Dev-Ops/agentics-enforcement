@@ -19,12 +19,14 @@ export interface CoreAttributes {
   readonly core_name: string;
   readonly execution_id: string;
   readonly delegated_repos: readonly string[];
+  readonly simulation_resolution?: string;
 }
 
 export interface RepoAttributes {
   readonly repo_name: string;
   readonly core_parent: string;
   readonly execution_id: string;
+  readonly simulation_resolution?: string;
 }
 
 export interface AgentAttributes {

@@ -9,11 +9,12 @@
  *
  * Flow:
  *   1. Parse/validate the request body as ExecutionIntent (via Zod).
- *   2. On parse failure → reject with 400.
- *   3. Run enforcement gate (ADR-003).
- *   4. On enforcement block → reject with 403.
- *   5. On enforcement allow → delegate to ExecutionAcceptanceService.accept().
- *   6. Return AcceptanceResponse with 201.
+ *   2. Validate execution context fields (simulation_resolution, repo_name REQUIRED).
+ *   3. On parse failure → reject with 400.
+ *   4. Run enforcement gate (ADR-003).
+ *   5. On enforcement block → reject with 403.
+ *   6. On enforcement allow → delegate to ExecutionAcceptanceService.accept().
+ *   7. Return AcceptanceResponse with 201.
  */
 import { ExecutionIntentSchema, type ExecutionIntent } from '../contracts/index.js';
 import { ExecutionAcceptanceService } from '../execution/execution-acceptance-service.js';
@@ -67,6 +68,23 @@ export class AcceptHandler {
 
     const intent = parseResult.data;
 
+    // Step 2b: Validate required execution context fields from request body metadata
+    const simulation_resolution = this.extractStringField(req.body, 'simulation_resolution');
+    const repo_name = this.extractStringField(req.body, 'repo_name');
+
+    if (!simulation_resolution) {
+      return {
+        status: 400,
+        body: { error: 'simulation_resolution is required in execution context' },
+      };
+    }
+    if (!repo_name) {
+      return {
+        status: 400,
+        body: { error: 'repo_name is required in execution context' },
+      };
+    }
+
     // Step 3: Enforcement gate — ADR-003
     const gateResult = this.enforcementGate.evaluate(intent);
 
@@ -83,20 +101,27 @@ export class AcceptHandler {
       };
     }
 
-    // Step 5: Allowed → delegate to acceptance service with decision attached
-    try {
-      const acceptance = this.acceptanceService.accept(intent, gateResult.decision);
+    // Step 5: Allowed → delegate to acceptance service with decision + context attached
+    const acceptance = this.acceptanceService.accept(
+      intent,
+      { simulation_resolution, repo_name },
+      gateResult.decision,
+    );
 
-      // Step 6: Return 201
-      return {
-        status: 201,
-        body: acceptance,
-      };
-    } catch (err) {
-      return {
-        status: 500,
-        body: { error: err instanceof Error ? err.message : 'Internal error' },
-      };
+    // Step 6: Return 201
+    return {
+      status: 201,
+      body: acceptance,
+    };
+  }
+
+  private extractStringField(body: unknown, field: string): string | undefined {
+    if (body && typeof body === 'object' && field in body) {
+      const value = (body as Record<string, unknown>)[field];
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
     }
+    return undefined;
   }
 }

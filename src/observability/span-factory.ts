@@ -3,12 +3,15 @@
  * DDD-005: Domain Service
  *
  * One method per span type. Each method:
- *   1. Assembles type-specific attributes.
- *   2. Creates a Span via createSpan().
- *   3. Emits SpanCreated domain event (if eventBus provided).
+ *   1. Validates parent_span_id (REQUIRED for non-root spans — throws if missing).
+ *   2. Assembles type-specific attributes.
+ *   3. Creates a Span via createSpan().
+ *   4. Emits SpanCreated domain event (if eventBus provided).
+ *
+ * NO orphan spans. NO non-null assertions. Missing identifiers → throw.
  */
 import type { Span } from './span.js';
-import { createSpan } from './span.js';
+import { createSpan, MissingSpanIdentifierError } from './span.js';
 import type {
   ExecutionRootAttributes,
   ContractValidationAttributes,
@@ -27,6 +30,9 @@ export class SpanFactory {
     caller: string,
     intent_id: string,
   ): Span {
+    if (!execution_id) {
+      throw new MissingSpanIdentifierError('execution_id', 'execution_root');
+    }
     const attributes: ExecutionRootAttributes = {
       execution_id,
       caller,
@@ -49,6 +55,7 @@ export class SpanFactory {
     schema_version: string,
     result: 'pass' | 'fail' | 'policy_denied',
   ): Span {
+    this.requireParentSpanId(parent_span_id, execution_id, 'contract_validation');
     const attributes: ContractValidationAttributes = {
       intent_id,
       schema_version,
@@ -69,11 +76,14 @@ export class SpanFactory {
     parent_span_id: string,
     core_name: string,
     delegated_repos: readonly string[],
+    simulation_resolution?: string,
   ): Span {
+    this.requireParentSpanId(parent_span_id, execution_id, 'core');
     const attributes: CoreAttributes = {
       core_name,
       execution_id,
       delegated_repos,
+      ...(simulation_resolution ? { simulation_resolution } : {}),
     };
     const span = createSpan({
       parent_span_id,
@@ -89,11 +99,14 @@ export class SpanFactory {
     execution_id: string,
     parent_span_id: string,
     repo_name: string,
+    simulation_resolution?: string,
   ): Span {
+    this.requireParentSpanId(parent_span_id, execution_id, 'repo');
     const attributes: RepoAttributes = {
       repo_name,
       core_parent: parent_span_id,
       execution_id,
+      ...(simulation_resolution ? { simulation_resolution } : {}),
     };
     const span = createSpan({
       parent_span_id,
@@ -110,6 +123,7 @@ export class SpanFactory {
     parent_span_id: string,
     agent_id: string,
   ): Span {
+    this.requireParentSpanId(parent_span_id, execution_id, 'agent');
     const attributes: AgentAttributes = {
       agent_id,
       repo_parent: parent_span_id,
@@ -123,6 +137,23 @@ export class SpanFactory {
     });
     this.emitCreated(span);
     return span;
+  }
+
+  /**
+   * Require parent_span_id for non-root spans.
+   * Throws immediately if missing — NO orphan spans allowed.
+   */
+  private requireParentSpanId(
+    parent_span_id: string | undefined | null,
+    execution_id: string,
+    span_type: string,
+  ): asserts parent_span_id is string {
+    if (!parent_span_id) {
+      throw new MissingSpanIdentifierError(
+        `parent_span_id (required for ${span_type} span, execution_id: ${execution_id})`,
+        span_type as any,
+      );
+    }
   }
 
   private emitCreated(span: Span): void {

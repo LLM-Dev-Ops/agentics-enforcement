@@ -19,7 +19,7 @@ export type {
 
 // Entity
 export type { Span, CreateSpanParams } from './span.js';
-export { createSpan, closeSpan } from './span.js';
+export { createSpan, closeSpan, OrphanSpanError, MissingSpanIdentifierError } from './span.js';
 
 // Aggregate Root
 export type { TreeStatus, SpanTree } from './span-tree.js';

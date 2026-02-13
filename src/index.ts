@@ -1,11 +1,11 @@
 /**
  * @agentics/enforcement — public API surface
  *
- * Contract schemas re-exported from src/contracts/ (ADR-001).
+ * Contract schemas re-exported from @agentics/contracts via src/contracts/ (ADR-001).
  * Enforcement domain types and factory from src/domain/ + src/services/ (ADR-002, DDD-003).
  */
 
-// ── Contract schemas (Published Language from Contract Context) ──────────
+// ── Contract schemas (Published Language from @agentics/contracts) ───────
 export {
   CONTRACTS_VERSION,
   CANONICAL_SCHEMA_NAMES,
@@ -18,6 +18,8 @@ export {
   EvidenceEntrySchema,
   PolicyDecisionSchema,
   CostReferenceSchema,
+  ExecutionContextSchema,
+  ResultPacketSchema,
   NodeType,
   ResultStatus,
   type ExecutionIntent,
@@ -29,6 +31,8 @@ export {
   type EvidenceEntry,
   type PolicyDecision,
   type CostReference,
+  type ExecutionContext,
+  type ResultPacket,
 } from './contracts/index.js';
 
 // ── Enforcement domain types ─────────────────────────────────────────────
@@ -41,7 +45,7 @@ export type { EnforcementRule, RuleResult } from './domain/enforcement-rule.js';
 export type { EnforcementDecision } from './domain/enforcement-decision.js';
 
 // ── Domain events ────────────────────────────────────────────────────────
-export { EventBus, type DomainEvent, type EventHandler } from './domain/events/event-bus.js';
+export { EventBus, EventHandlerError, type DomainEvent, type EventHandler } from './domain/events/event-bus.js';
 
 // ── Built-in rules (for consumers who want to compose their own engine) ──
 export { createIntentCompletenessRule } from './rules/intent-completeness-rule.js';
@@ -97,6 +101,10 @@ export {
   createExecutionRejected,
   InMemoryExecutionRepository,
   ExecutionAcceptanceService,
+  type AcceptOptions,
+  validateExecutionContext,
+  buildExecutionContext,
+  MissingExecutionContextFieldError,
 } from './execution/index.js';
 
 // ── Enforcement gate (ADR-003) ──────────────────────────────────────────
@@ -165,6 +173,8 @@ export {
   InvalidSpanTransitionError,
   createSpan,
   closeSpan,
+  OrphanSpanError,
+  MissingSpanIdentifierError,
   createSpanTree,
   addSpanToTree,
   completeSpanTree,
@@ -196,6 +206,7 @@ export {
   MapCoreResolver,
   extractCoreSteps,
   GraphCycleError,
+  MissingGraphNodeError,
   determineOutcome,
   createDispatchResult,
   SimulationEngine,
@@ -234,3 +245,13 @@ export {
   createCostReferenceResolvedEvent,
 } from './cost/index.js';
 // NOTE: RawCostValue deliberately NOT exported — internal to CostOps only (ADR-007)
+
+// ── Results-index writer ────────────────────────────────────────────────
+export {
+  ResultsIndexWriter,
+  ResultsIndexUrlMissingError,
+  ResultsIndexWriteError,
+} from './results-index/index.js';
+
+// ── Contract validation services ────────────────────────────────────────
+export { SchemaRegistry, ContractValidationError, SchemaNotFoundError } from './services/schema-registry.js';

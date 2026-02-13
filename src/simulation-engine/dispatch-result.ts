@@ -1,8 +1,10 @@
 /**
  * DispatchResult — Value object representing the aggregated outcome of a dispatch.
  * ADR-005: Collect and aggregate results from core delegations.
+ *
+ * simulation_resolution is REQUIRED — propagated from execution context.
  */
-import type { CoreExecutionResult, ResultStatus } from '../contracts/index.js';
+import type { CoreExecutionResult } from '../contracts/index.js';
 
 export type DispatchOutcome = 'success' | 'failure' | 'partial';
 
@@ -11,6 +13,7 @@ export interface DispatchResult {
   readonly outcome: DispatchOutcome;
   readonly results: readonly CoreExecutionResult[];
   readonly completed_at: string;
+  readonly simulation_resolution: string;
 }
 
 export function determineOutcome(results: readonly CoreExecutionResult[]): DispatchOutcome {
@@ -29,11 +32,18 @@ export function determineOutcome(results: readonly CoreExecutionResult[]): Dispa
 export function createDispatchResult(
   executionId: string,
   results: readonly CoreExecutionResult[],
+  simulation_resolution: string,
 ): DispatchResult {
+  if (!simulation_resolution) {
+    throw new Error(
+      `Cannot create dispatch result: simulation_resolution is required (execution_id: ${executionId})`,
+    );
+  }
   return {
     execution_id: executionId,
     outcome: determineOutcome(results),
     results,
     completed_at: new Date().toISOString(),
+    simulation_resolution,
   };
 }

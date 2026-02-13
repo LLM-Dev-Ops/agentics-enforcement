@@ -15,6 +15,9 @@ export type { AcceptanceResponse, RejectionResponse, AcceptResult } from './acce
 export type { Execution } from './execution.js';
 export { transitionExecution } from './execution.js';
 
+// Execution Context
+export { validateExecutionContext, buildExecutionContext, MissingExecutionContextFieldError } from './execution-context.js';
+
 // Domain Events
 export { createExecutionAccepted, createExecutionRejected } from './execution-events.js';
 
@@ -23,4 +26,4 @@ export type { ExecutionRepository } from './execution-repository.js';
 export { InMemoryExecutionRepository } from './execution-repository.js';
 
 // Domain Service
-export { ExecutionAcceptanceService } from './execution-acceptance-service.js';
+export { ExecutionAcceptanceService, type AcceptOptions } from './execution-acceptance-service.js';

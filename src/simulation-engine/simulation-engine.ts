@@ -8,6 +8,13 @@
  *   3. Resolve which CoreDelegate handles each step
  *   4. Delegate to the resolved Core
  *   5. Collect and aggregate CoreExecutionResults
+ *
+ * Contract enforcement:
+ *   - Validates ExecutionGraph against contracts before processing.
+ *   - Validates each CoreExecutionResult against contracts before aggregating.
+ *   - Validates DispatchResult against contracts before returning.
+ *   - simulation_resolution is propagated from execution context to spans and output.
+ *   - NO non-null assertions. All lookups validated explicitly.
  */
 import type { Execution } from '../execution/execution.js';
 import { transitionExecution } from '../execution/execution.js';
@@ -20,6 +27,7 @@ import { createDispatchResult, type DispatchResult } from './dispatch-result.js'
 import { SpanFactory } from '../observability/span-factory.js';
 import { closeSpan } from '../observability/span.js';
 import type { EventBus } from '../domain/events/event-bus.js';
+import { SchemaRegistry, ContractValidationError } from '../services/schema-registry.js';
 import {
   createDispatchStartedEvent,
   createCoreDelegationStartedEvent,
@@ -39,13 +47,24 @@ export class UnresolvedCoreError extends Error {
 }
 
 export class SimulationEngine {
+  private readonly schemaRegistry: SchemaRegistry;
+
   constructor(
     private readonly resolver: CoreResolver,
     private readonly spanFactory: SpanFactory,
     private readonly eventBus?: EventBus,
-  ) {}
+  ) {
+    this.schemaRegistry = new SchemaRegistry();
+  }
 
   dispatch(execution: Execution, graph: ExecutionGraph): DispatchResult {
+    // Runtime validation: validate graph against contracts before processing
+    this.schemaRegistry.validateOrThrow(
+      'ExecutionGraph',
+      graph,
+      execution.execution_id.value,
+    );
+
     // 1. Transition: accepted → validating
     transitionExecution(execution, 'validating');
 
@@ -91,7 +110,7 @@ export class SimulationEngine {
         throw new UnresolvedCoreError(step.coreName);
       }
 
-      // Create core span
+      // Create core span — attach to root span, propagate simulation_resolution
       const repoNames = step.childNodes
         .filter((n) => n.type === 'repo')
         .map((n) => n.name);
@@ -100,6 +119,7 @@ export class SimulationEngine {
         execution.root_span.span_id,
         step.coreName,
         repoNames,
+        execution.simulation_resolution,
       );
 
       this.emit(createCoreDelegationStartedEvent(execution.execution_id.value, step.coreName));
@@ -109,6 +129,13 @@ export class SimulationEngine {
         step.coreName,
         execution.execution_id.value,
         [...step.childNodes],
+      );
+
+      // Runtime validation: validate CoreExecutionResult against contracts
+      this.schemaRegistry.validateOrThrow(
+        'CoreExecutionResult',
+        result,
+        execution.execution_id.value,
       );
 
       // Close span based on result status
@@ -127,13 +154,21 @@ export class SimulationEngine {
           execution.execution_id.value,
           `Core ${step.coreName} failed`,
         ));
-        return createDispatchResult(execution.execution_id.value, [...execution.results]);
+        return createDispatchResult(
+          execution.execution_id.value,
+          [...execution.results],
+          execution.simulation_resolution,
+        );
       }
     }
 
     // 5. All cores succeeded — transition to completed
     transitionExecution(execution, 'completed');
-    const dispatchResult = createDispatchResult(execution.execution_id.value, [...execution.results]);
+    const dispatchResult = createDispatchResult(
+      execution.execution_id.value,
+      [...execution.results],
+      execution.simulation_resolution,
+    );
     this.emit(createDispatchCompletedEvent(
       execution.execution_id.value,
       dispatchResult.outcome,

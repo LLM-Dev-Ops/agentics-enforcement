@@ -7,6 +7,8 @@ export interface AcceptanceResponse {
   readonly execution_id: string;
   readonly root_span_id: string;
   readonly accepted: true;
+  readonly simulation_resolution: string;
+  readonly repo_name: string;
 }
 
 export interface RejectionResponse {

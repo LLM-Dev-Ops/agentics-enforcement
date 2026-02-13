@@ -4,7 +4,7 @@ export { InMemoryStubDelegate } from './core-delegate.js';
 export type { CoreResolver } from './core-resolver.js';
 export { MapCoreResolver } from './core-resolver.js';
 export type { CoreStep } from './graph-walker.js';
-export { extractCoreSteps, GraphCycleError } from './graph-walker.js';
+export { extractCoreSteps, GraphCycleError, MissingGraphNodeError } from './graph-walker.js';
 export type { DispatchResult, DispatchOutcome } from './dispatch-result.js';
 export { determineOutcome, createDispatchResult } from './dispatch-result.js';
 export { SimulationEngine, UnresolvedCoreError, RepoAssignmentViolationError, GraphHierarchyViolationError } from './simulation-engine.js';

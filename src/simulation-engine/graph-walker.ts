@@ -3,6 +3,9 @@
  * ADR-005: The simulation engine walks the execution graph to determine delegation order.
  *
  * Uses Kahn's algorithm for deterministic topological sort on core-level edges.
+ *
+ * NO non-null assertions (!!). All lookups are validated explicitly.
+ * Missing graph identifiers → throw.
  */
 import type { ExecutionGraph, GraphNode } from '../contracts/index.js';
 
@@ -16,6 +19,16 @@ export class GraphCycleError extends Error {
   override readonly name = 'GraphCycleError';
   constructor(coreNames: string[]) {
     super(`Cycle detected among core nodes: ${coreNames.join(', ')}`);
+  }
+}
+
+export class MissingGraphNodeError extends Error {
+  override readonly name = 'MissingGraphNodeError';
+  constructor(
+    public readonly nodeId: string,
+    public readonly context: string,
+  ) {
+    super(`Graph node '${nodeId}' not found: ${context}`);
   }
 }
 
@@ -48,7 +61,11 @@ export function extractCoreSteps(graph: ExecutionGraph): CoreStep[] {
     // Walk up parent chain to find owning core
     const owningCore = findOwningCore(node, nodeMap, coreIds);
     if (owningCore) {
-      coreChildren.get(owningCore)!.push(node);
+      const children = coreChildren.get(owningCore);
+      if (!children) {
+        throw new MissingGraphNodeError(owningCore, 'core children list missing during graph walk');
+      }
+      children.push(node);
     }
   }
 
@@ -62,8 +79,13 @@ export function extractCoreSteps(graph: ExecutionGraph): CoreStep[] {
 
   for (const edge of graph.edges) {
     if (coreIds.has(edge.from) && coreIds.has(edge.to)) {
-      adjacency.get(edge.from)!.push(edge.to);
-      inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
+      const adj = adjacency.get(edge.from);
+      if (!adj) {
+        throw new MissingGraphNodeError(edge.from, 'adjacency list missing for core edge source');
+      }
+      adj.push(edge.to);
+      const currentDeg = inDegree.get(edge.to) ?? 0;
+      inDegree.set(edge.to, currentDeg + 1);
     }
   }
 
@@ -75,10 +97,16 @@ export function extractCoreSteps(graph: ExecutionGraph): CoreStep[] {
 
   const sorted: string[] = [];
   while (queue.length > 0) {
-    const current = queue.shift()!;
+    const current = queue.shift();
+    if (!current) break;
     sorted.push(current);
-    for (const neighbor of adjacency.get(current) ?? []) {
-      const newDeg = inDegree.get(neighbor)! - 1;
+    const neighbors = adjacency.get(current) ?? [];
+    for (const neighbor of neighbors) {
+      const currentDeg = inDegree.get(neighbor);
+      if (currentDeg === undefined) {
+        throw new MissingGraphNodeError(neighbor, 'in-degree missing during topological sort');
+      }
+      const newDeg = currentDeg - 1;
       inDegree.set(neighbor, newDeg);
       if (newDeg === 0) queue.push(neighbor);
     }
@@ -93,7 +121,10 @@ export function extractCoreSteps(graph: ExecutionGraph): CoreStep[] {
 
   // 5. Build CoreStep[] in sorted order
   return sorted.map((coreId) => {
-    const coreNode = nodeMap.get(coreId)!;
+    const coreNode = nodeMap.get(coreId);
+    if (!coreNode) {
+      throw new MissingGraphNodeError(coreId, 'core node missing during step construction');
+    }
     return {
       coreName: coreNode.name,
       coreNodeId: coreNode.id,
