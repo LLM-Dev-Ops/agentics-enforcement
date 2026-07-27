@@ -14,7 +14,8 @@
     "check:contract-imports": "node --import tsx scripts/contract-import-check.ts",
     "check:mock-defaults": "node --import tsx scripts/mock-default-check.ts",
     "check:fabricated-telemetry": "node --import tsx scripts/fabricated-telemetry-check.ts",
-    "check:claims-honesty": "node --import tsx scripts/claims-honesty-check.ts"
+    "check:claims-honesty": "node --import tsx scripts/claims-honesty-check.ts",
+    "check:dependency-name-resolution": "node --import tsx scripts/dependency-name-resolution-check.ts"
   },
   "dependencies": {
     "@agentics/contracts": ">=0.1.0",
@@ -22,7 +23,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/semver": "^7.5.0",
     "eslint": "^9.0.0",
+    "semver": "^7.6.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
