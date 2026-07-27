@@ -18,7 +18,7 @@ Runtime enforcement catches violations at execution time. But many invariants ca
 
 ## Decision
 
-**Five CI enforcement hooks are deployed across the fleet. Each hook runs on PR/push events and blocks merging on violation.**
+**Six CI enforcement hooks are deployed across the fleet. Each hook runs on PR/push events and blocks merging on violation, except where the registry records a Warn severity.**
 
 ### Hook Registry
 
@@ -29,6 +29,7 @@ Runtime enforcement catches violations at execution time. But many invariants ca
 | `span-emission-check` | All execution-participating repos | PR / push | Warn if span creation calls are missing in execution paths | **Warn** |
 | `hierarchy-violation-check` | Foundational repos (1–26) | PR / push | Reject if orchestration patterns detected (cross-repo calls, execution initiation) | **Block** |
 | `contract-import-check` | agentics-enforcement | PR / push | Reject if schemas are defined locally instead of imported from contracts | **Block** |
+| `claims-honesty-check` | All repos with a README | PR / push | Reject if a README status claim is unbacked per ADR-013 Rules 1–4 | **Warn** (**Block** from 2026-10-01) |
 
 ### Detection Patterns
 
@@ -49,6 +50,13 @@ Runtime enforcement catches violations at execution time. But many invariants ca
 **hierarchy-violation-check:**
 - Scan foundational repos for patterns indicating orchestration: direct HTTP calls to other foundational repos, execution graph construction, `execution_id` generation.
 - Exclude calls to the Core layer (those are legitimate).
+
+**claims-honesty-check** (added by ADR-013):
+- Rule 1: flag `img.shields.io/badge/` URLs whose metric segment is a measured quantity (`coverage`, `tests`, `rps`, `throughput`, `latency`, `uptime`, `build`) and whose value segment is a literal number, percentage, or `passing`.
+- Rule 2: for READMEs claiming production readiness, flag unchecked `- [ ]` items under a gate/release/v1.0/production heading in `**/COMPLETION_ROADMAP.md`, `**/ROADMAP.md`, `**/*COMPLETION*.md`.
+- Rule 3: flag a README containing both a placeholder-org token (`your-org`, `yourusername`, `your-username`, `yourorg`) and a production-readiness token.
+- Rule 4: if a README asserts `build-passing` or "zero compilation errors", require a committed lockfile matching the repo's manifest type.
+- Exempt: READMEs declaring `Status: Experimental`/`Alpha`/`WIP`; roadmaps annotated `@post-1.0-roadmap`.
 
 **contract-import-check:**
 - In agentics-enforcement only, verify that all 6 canonical schema types are imported from `agentics-contracts`, not defined in-repo.
