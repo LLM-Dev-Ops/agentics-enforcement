@@ -18,7 +18,7 @@ Runtime enforcement catches violations at execution time. But many invariants ca
 
 ## Decision
 
-**Five CI enforcement hooks are deployed across the fleet. Each hook runs on PR/push events and blocks merging on violation.**
+**Six CI enforcement hooks are deployed across the fleet. Each hook runs on PR/push events and blocks merging on violation.**
 
 ### Hook Registry
 
@@ -29,6 +29,7 @@ Runtime enforcement catches violations at execution time. But many invariants ca
 | `span-emission-check` | All execution-participating repos | PR / push | Warn if span creation calls are missing in execution paths | **Warn** |
 | `hierarchy-violation-check` | Foundational repos (1–26) | PR / push | Reject if orchestration patterns detected (cross-repo calls, execution initiation) | **Block** |
 | `contract-import-check` | agentics-enforcement | PR / push | Reject if schemas are defined locally instead of imported from contracts | **Block** |
+| `dependency-name-resolution-check` | All repos with a `Cargo.toml` or `package.json` | PR / push | Reject if any declared dependency name cannot be resolved to a real package at the declared source and version | **Block** |
 
 ### Detection Patterns
 
@@ -53,12 +54,20 @@ Runtime enforcement catches violations at execution time. But many invariants ca
 **contract-import-check:**
 - In agentics-enforcement only, verify that all 6 canonical schema types are imported from `agentics-contracts`, not defined in-repo.
 
+**dependency-name-resolution-check** (added by ADR-015):
+- Resolve each declared dependency against the source it names: Cargo `path` targets by `[package] name`, Cargo `git` sources by enumerating the manifests present at the pinned ref, Cargo registry sources against crates.io, `workspace = true` keys against the root `[workspace.dependencies]` table, npm `github:` specifiers against the target repo's root `package.json` name, and `@llm-dev-ops/*` semver ranges against published registry versions.
+- Only platform names are checked — `llm-*`, `infra-*`, `agentics-*`, `@llm-dev-ops/*`, `@agentics/*`, and fleet repo stems.
+- Provenance: git URLs and crates.io `repository` fields outside the org allowlist (`LLM-Dev-Ops`, `globalbusinessadvisors`, `llm-devops`) warn rather than block.
+
 ### Exemptions
 
 | Exemption | Scope | Mechanism |
 |---|---|---|
 | Tier-1 meta simulation | `cost-calculation-check` | File-level annotation `@tier1-meta-simulation` |
 | Test files | All hooks | Glob exclusion `**/*.test.*`, `**/*.spec.*`, `**/test/**` |
+| Third-party dependency names | `dependency-name-resolution-check` | Only platform-prefixed names and fleet repo stems are resolved |
+| Deliberately unpublished crate | `dependency-name-resolution-check` | Manifest key `[package.metadata.agentics] unpublished = true` downgrades registry failures to warn |
+| Offline CI | `dependency-name-resolution-check` | `--offline` skips registry and git-ref rules; path and workspace rules always run |
 
 ## Consequences
 
@@ -71,7 +80,7 @@ Runtime enforcement catches violations at execution time. But many invariants ca
 ### Negative
 - False positives may block legitimate code. Mitigation: pattern matchers should be precise; escape hatches via annotation for known exemptions.
 - CI hooks add build time. Mitigation: hooks are lightweight text scanners, not full compilation.
-- Maintaining 5 hooks across ~53 repos requires centralized hook management.
+- Maintaining 6 hooks across ~53 repos requires centralized hook management.
 
 ### Risks
 - Overly aggressive pattern matching could block legitimate code. Mitigation: start with precise patterns, expand based on observed violations.
