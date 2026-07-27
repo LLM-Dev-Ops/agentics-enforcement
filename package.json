@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "lint": "eslint src/",
     "check:schema-duplication": "node --import tsx scripts/schema-duplication-check.ts",
-    "check:contract-imports": "node --import tsx scripts/contract-import-check.ts"
+    "check:contract-imports": "node --import tsx scripts/contract-import-check.ts",
+    "check:mock-defaults": "node --import tsx scripts/mock-default-check.ts",
+    "check:fabricated-telemetry": "node --import tsx scripts/fabricated-telemetry-check.ts"
   },
   "dependencies": {
     "@agentics/contracts": ">=0.1.0",
