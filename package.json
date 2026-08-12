@@ -18,7 +18,7 @@
     "check:dependency-name-resolution": "node --import tsx scripts/dependency-name-resolution-check.ts"
   },
   "dependencies": {
-    "@agentics/contracts": "npm:@llm-dev-ops/contracts@1.1.1",
+    "@agentics/contracts": "file:vendor/llm-dev-ops-contracts-1.1.2-3023047.tgz",
     "zod": "^3.24.0"
   },
   "devDependencies": {
